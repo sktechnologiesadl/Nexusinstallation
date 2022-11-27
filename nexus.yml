@@ -1,0 +1,81 @@
+- name: Install the Sonar
+  hosts: localhost
+  become: true
+  tasks:
+  - name: Download Java
+    get_url:
+      #url: http://download.oracle.com/otn-pub/java/jdk/8u60-b27/jdk-8u60-linux-x64.rpm
+      url: http://download.oracle.com/otn-pub/java/jdk/8u131-b11/d54c1d3a095b4ff2b6607d096fa80163/jdk-8u131-linux-x64.rpm
+      dest: /opt/jdk-8u60-linux-x64.rpm
+      #headers: 'Cookie: gpw_e24=http%3A%2F%2Fwww.oracle.com%2F; oraclelicense=accept-securebackup-cookie'
+      headers: "Cookie: oraclelicense=accept-securebackup-cookie"
+  - name: Install Java
+    yum:
+      name: /opt/jdk-8u60-linux-x64.rpm
+      state: present
+  - name: Create a Directory of Nexusinstall
+    ansible.builtin.file:
+      path: /opt/nexusinstall
+      state: directory
+      mode: '0755'    
+  - name: Download and Install Nexus Server
+    get_url:
+      url: https://download.sonatype.com/nexus/3/nexus-3.43.0-01-unix.tar.gz
+      dest: /opt/nexusinstall/nexus-3.43.0-01-unix.tar.gz
+  - name: unzip the nexus zip file
+    ansible.builtin.unarchive:
+      src: /opt/nexusinstall/nexus-3.43.0-01-unix.tar.gz
+      dest: /opt/nexusinstall
+  - name: Rename the Nexus Folder 
+    shell:
+      cmd: mv /opt/nexusinstall/nexus-3.43.0-01  /opt/nexusinstall/nexus
+  - name: Create Nexus User
+    ansible.builtin.user:
+      name: nexus
+      comment: Nexus user
+  - name: Give the Permissions and Ownership
+    ansible.builtin.file:
+      path: /opt/nexusinstall
+      owner: nexus
+      group: nexus
+      mode: '0755'
+      state: directory
+      recurse: yes
+  - name: Add sudo entry 
+    lineinfile:
+      path: /etc/sudoers
+      state: present
+      line: "{{ item }}"
+    with_items:
+      - 'nexus        ALL=(ALL)       NOPASSWD: ALL'     
+  # - name: Provide sudo access to nexus user 
+  #   community.general.sudoers:
+  #     name: nexus-do-as-root
+  #     state: present
+  #     user: nexus
+  #     runas: root
+  #     commands: ALL
+  - name: Update the nexus.rc file
+    lineinfile:
+      path: /opt/nexusinstall/nexus/bin/nexus.rc
+      state: present
+      line: "{{ item }}"
+    with_items:
+      - 'run_as_user="nexus"'
+  - name: Make the Symbolic like for nexus
+    ansible.builtin.file:
+      src: /opt/nexusinstall/nexus/bin/nexus
+      dest: /etc/init.d/nexus
+      state: link
+  - name: Make the service with these commands 
+    shell:
+      cmd: "{{ item }}"
+    with_items: 
+    - 'chkconfig --add nexus'
+    - 'chkconfig --levels 345 nexus on'
+  - name: Start the service
+    ansible.builtin.service:
+      name: nexus
+      state: started
+      enabled: yes
+
